@@ -4,9 +4,18 @@
 set HACKING_DIR (dirname (status -f))
 set FULL_PATH (python -c "import os; print(os.path.realpath('$HACKING_DIR'))")
 set ANSIBLE_HOME (dirname $FULL_PATH)
-set PREFIX_PYTHONPATH $ANSIBLE_HOME/lib 
-set PREFIX_PATH $ANSIBLE_HOME/bin 
+set PREFIX_PYTHONPATH $ANSIBLE_HOME/lib
+set PREFIX_PATH $ANSIBLE_HOME/bin
 set PREFIX_MANPATH $ANSIBLE_HOME/docs/man
+
+# set quiet flag
+if test (count $argv) -ge 1
+    switch $argv
+        case '-q' '--quiet'
+            set QUIET "true"
+        case '*'
+    end
+end
 
 # Set PYTHONPATH
 if not set -q PYTHONPATH
@@ -15,8 +24,10 @@ else
     switch PYTHONPATH
         case "$PREFIX_PYTHONPATH*"
         case "*"
-            echo "Appending PYTHONPATH"
-            set -gx PYTHONPATH $PREFIX_PYTHONPATH:$PYTHONPATH
+            if not [ $QUIET ]
+                echo "Appending PYTHONPATH"
+            end
+            set -gx PYTHONPATH "$PREFIX_PYTHONPATH:$PYTHONPATH"
     end
 end
 
@@ -28,7 +39,7 @@ end
 # Set MANPATH
 if not contains $PREFIX_MANPATH $MANPATH
     if not set -q MANPATH
-        set -gx MANPATH $PREFIX_MANPATH
+        set -gx MANPATH $PREFIX_MANPATH:
     else
         set -gx MANPATH $PREFIX_MANPATH $MANPATH
     end
@@ -36,22 +47,33 @@ end
 
 set -gx ANSIBLE_LIBRARY $ANSIBLE_HOME/library
 
-if set -q argv 
-    switch $argv
-    case '-q' '--quiet'
-    case '*'
-        echo ""
-        echo "Setting up Ansible to run out of checkout..."
-        echo ""
-        echo "PATH=$PATH"
-        echo "PYTHONPATH=$PYTHONPATH"
-        echo "ANSIBLE_LIBRARY=$ANSIBLE_LIBRARY"
-        echo "MANPATH=$MANPATH"
-        echo ""
-
-        echo "Remember, you may wish to specify your host file with -i"
-        echo ""
-        echo "Done!"
-        echo ""
-   end
+# Generate egg_info so that pkg_resources works
+pushd $ANSIBLE_HOME
+if test -e $PREFIX_PYTHONPATH/ansible*.egg-info
+    rm -r $PREFIX_PYTHONPATH/ansible*.egg-info
 end
+if [ $QUIET ]
+    python setup.py -q egg_info
+else
+    python setup.py egg_info
+end
+find . -type f -name "*.pyc" -delete
+popd
+
+
+if not [ $QUIET ]
+    echo ""
+    echo "Setting up Ansible to run out of checkout..."
+    echo ""
+    echo "PATH=$PATH"
+    echo "PYTHONPATH=$PYTHONPATH"
+    echo "ANSIBLE_LIBRARY=$ANSIBLE_LIBRARY"
+    echo "MANPATH=$MANPATH"
+    echo ""
+    echo "Remember, you may wish to specify your host file with -i"
+    echo ""
+    echo "Done!"
+    echo ""
+end
+
+set -e QUIET

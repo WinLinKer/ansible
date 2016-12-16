@@ -1,9 +1,6 @@
 Prompts
 =======
 
-.. contents::
-   :depth: 2
-
 When running a playbook, you may wish to prompt the user for certain input, and can
 do so with the 'vars_prompt' section.  
 
@@ -18,18 +15,24 @@ Here is a most basic example::
     ---
     - hosts: all
       remote_user: root
+
       vars:
         from: "camelot"
+
       vars_prompt:
-        name: "what is your name?"
-        quest: "what is your quest?"
-        favcolor: "what is your favorite color?"
+        - name: "name"
+          prompt: "what is your name?"
+        - name: "quest"
+          prompt: "what is your quest?"
+        - name: "favcolor"
+          prompt: "what is your favorite color?"
 
 If you have a variable that changes infrequently, it might make sense to
 provide a default value that can be overridden.  This can be accomplished using
 the default argument::
 
    vars_prompt:
+
      - name: "release_version"
        prompt: "Product release version"
        default: "1.0"
@@ -38,9 +41,11 @@ An alternative form of vars_prompt allows for hiding input from the user, and ma
 some other options, but otherwise works equivalently::
 
    vars_prompt:
+
      - name: "some_password"
        prompt: "Enter password"
        private: yes
+
      - name: "release_version"
        prompt: "Product release version"
        private: no
@@ -49,10 +54,11 @@ If `Passlib <http://pythonhosted.org/passlib/>`_ is installed, vars_prompt can a
 entered value so you can use it, for instance, with the user module to define a password::
 
    vars_prompt:
+
      - name: "my_password2"
        prompt: "Enter password2"
        private: yes
-       encrypt: "md5_crypt"
+       encrypt: "sha512_crypt"
        confirm: yes
        salt_size: 7
 
@@ -76,7 +82,7 @@ You can use any crypt scheme supported by 'Passlib':
 - *scram* - SCRAM Hash
 - *bsd_nthash* - FreeBSD’s MCF-compatible nthash encoding
 
-However, the only parameters accepted are 'salt' or 'salt_size'. You can use you own salt using
+However, the only parameters accepted are 'salt' or 'salt_size'. You can use your own salt using
 'salt', or have one generated automatically using 'salt_size'. If nothing is specified, a salt
 of size 8 will be generated.
 

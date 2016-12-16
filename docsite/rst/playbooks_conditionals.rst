@@ -1,18 +1,17 @@
 Conditionals
 ============
 
-.. contents::
-   :depth: 2
+.. contents:: Topics
+
 
 Often the result of a play may depend on the value of a variable, fact (something learned about the remote system), 
 or previous task result.  In some cases, the values of variables may depend on other variables.  
 Further, additional groups can be created to manage hosts based on
-whether the hosts match other criteria.   There are many options to control execution flow in Ansible.
+whether the hosts match other criteria.   There are many options to control execution flow in Ansible. More examples of supported conditionals can be located here: http://jinja.pocoo.org/docs/dev/templates/#comparisons
 
 Let's dig into what they are.
 
-.. contents::
-   :depth: 2
+.. _the_when_statement:
 
 The When Statement
 ``````````````````
@@ -21,13 +20,32 @@ Sometimes you will want to skip a particular step on a particular host.  This co
 as simple as not installing a certain package if the operating system is a particular version,
 or it could be something like performing some cleanup steps if a filesystem is getting full.
 
-This is easy to do in Ansible, with the `when` clause, which contains a Jinja2 expression (see `playbooks_variables`).
+This is easy to do in Ansible with the `when` clause, which contains a raw Jinja2 expression without double curly braces (see :doc:`playbooks_variables`).
 It's actually pretty simple::
 
     tasks:
-      - name: "shutdown Debian flavored systems"
+      - name: "shut down Debian flavored systems"
         command: /sbin/shutdown -t now
         when: ansible_os_family == "Debian"
+        # note that Ansible facts and vars like ansible_os_family can be used
+        # directly in conditionals without double curly braces
+
+You can also use parentheses to group conditions::
+
+    tasks:
+      - name: "shut down CentOS 6 and Debian 7 systems"
+        command: /sbin/shutdown -t now
+        when: (ansible_distribution == "CentOS" and ansible_distribution_major_version == "6") or
+              (ansible_distribution == "Debian" and ansible_distribution_major_version == "7")
+
+Multiple conditions that all need to be true (a logical 'and') can also be specified as a list::
+
+    tasks:
+      - name: "shut down CentOS 6 systems"
+        command: /sbin/shutdown -t now
+        when:
+          - ansible_distribution == "CentOS"
+          - ansible_distribution_major_version == "6"
 
 A number of Jinja2 "filters" can also be used in when statements, some of which are unique
 and provided by Ansible.  Suppose we want to ignore the error of one statement and then
@@ -37,12 +55,19 @@ decide to do something conditionally based on success or failure::
       - command: /bin/false
         register: result
         ignore_errors: True
+
       - command: /bin/something
         when: result|failed
+
+      # In older versions of ansible use |success, now both are valid but succeeded uses the correct tense.
       - command: /bin/something_else
-        when: result|success
+        when: result|succeeded
+
       - command: /bin/still/something_else
         when: result|skipped
+
+
+.. note:: the filters have been updated in 2.1 so both `success` and `succeeded` work (`fail`/`failed`, etc).
 
 Note that was a little bit of foreshadowing on the 'register' statement.  We'll get to it a bit later in this chapter.
 
@@ -82,18 +107,37 @@ If a required variable has not been set, you can skip or fail using Jinja2's
         - shell: echo "I've got '{{ foo }}' and am not afraid to use it!"
           when: foo is defined
 
-        - fail: msg="Bailing out: this play requires 'bar'"
-          when: bar is not defined
+        - fail: msg="Bailing out. this play requires 'bar'"
+          when: bar is undefined
 
 This is especially useful in combination with the conditional import of vars
 files (see below).
 
-Note that when combining `when` with `with_items` (see :doc:`playbooks_loops`), be aware that the `when` statement is processed separately for each item. This is by design::
+.. _loops_and_conditionals:
+
+Loops and Conditionals
+``````````````````````
+Combining `when` with `with_items` (see :doc:`playbooks_loops`), be aware that the `when` statement is processed separately for each item. This is by design::
 
     tasks:
         - command: echo {{ item }}
           with_items: [ 0, 2, 4, 6, 8, 10 ]
           when: item > 5
+
+If you need to skip the whole task depending on the loop variable being defined, used the `|default` filter to provide an empty iterator::
+
+        - command: echo {{ item }}
+          with_items: "{{ mylist|default([]) }}"
+          when: item > 5
+
+
+If using `with_dict` which does not take a list::
+
+        - command: echo {{ item.key }}
+          with_dict: "{{ mydict|default({}) }}"
+          when: item.value > 5
+
+.. _loading_in_custom_facts:
 
 Loading in Custom Facts
 ```````````````````````
@@ -107,16 +151,19 @@ there will be accessible to future tasks::
           action: site_facts
         - command: /usr/bin/thingy
           when: my_custom_fact_just_retrieved_from_the_remote_system == '1234'
-                   
+
+.. _when_roles_and_includes:
+
 Applying 'when' to roles and includes
 `````````````````````````````````````
 
 Note that if you have several tasks that all share the same conditional statement, you can affix the conditional
-to a task include statement as below.  Note this does not work with playbook includes, just task includes.  All the tasks
-get evaluated, but the conditional is applied to each and every task::
+to a task include statement as below.  All the tasks get evaluated, but the conditional is applied to each and every task::
 
     - include: tasks/sometasks.yml
       when: "'reticulating splines' in output"
+
+.. note:: In versions prior to 2.0 this worked with task includes but not playbook includes.  2.0 allows it to work with both.
 
 Or with a role::
 
@@ -125,7 +172,9 @@ Or with a role::
          - { role: debian_stock_config, when: ansible_os_family == 'Debian' }
 
 You will note a lot of 'skipped' output by default in Ansible when using this approach on systems that don't match the criteria.
-Read up on the 'group_by' module in the `modules` docs for a more streamlined way to accomplish the same thing.
+Read up on the 'group_by' module in the :doc:`modules` docs for a more streamlined way to accomplish the same thing.
+
+.. _conditional_imports:
 
 Conditional Imports
 ```````````````````
@@ -169,11 +218,11 @@ To use this conditional import feature, you'll need facter or ohai installed pri
 you can of course push this out with Ansible if you like::
 
     # for facter
-    ansible -m yum -a "pkg=facter ensure=installed"
-    ansible -m yum -a "pkg=ruby-json ensure=installed"
+    ansible -m yum -a "pkg=facter state=present"
+    ansible -m yum -a "pkg=ruby-json state=present"
 
     # for ohai
-    ansible -m yum -a "pkg=ohai ensure=installed"
+    ansible -m yum -a "pkg=ohai state=present"
 
 Ansible's approach to configuration -- separating variables from tasks, keeps your playbooks
 from turning into arbitrary code with ugly nested ifs, conditionals, and so on - and results
@@ -193,10 +242,10 @@ The following example shows how to template out a configuration file that was ve
     - name: template a file
       template: src={{ item }} dest=/etc/myapp/foo.conf
       with_first_found:
-        files: 
+        - files: 
            - {{ ansible_distribution }}.conf
            - default.conf
-        paths:
+          paths:
            - search_location_one/somedir/
            - /opt/other_location/somedir/
 
@@ -237,8 +286,24 @@ fields::
 
           - name: add home dirs to the backup spooler
             file: path=/mnt/bkspool/{{ item }} src=/home/{{ item }} state=link
-            with_items: home_dirs.stdout_lines
-            # same as with_items: home_dirs.stdout.split()
+            with_items: "{{ home_dirs.stdout_lines }}"
+            # same as with_items: "{{ home_dirs.stdout.split() }}"
+
+As shown previously, the registered variable's string contents are accessible with the 'stdout' value.
+You may check the registered variable's string contents for emptiness::
+
+    - name: check registered variable for emptiness
+      hosts: all
+
+      tasks:
+
+          - name: list contents of directory
+            command: ls mydir
+            register: contents
+
+          - name: check contents for emptiness
+            debug: msg="Directory is empty"
+            when: contents.stdout == ""
 
 
 .. seealso::
@@ -249,8 +314,6 @@ fields::
        Playbook organization by roles
    :doc:`playbooks_best_practices`
        Best practices in playbooks
-   :doc:`playbooks_conditionals`
-       Conditional statements in playbooks
    :doc:`playbooks_variables`
        All about variables
    `User Mailing List <http://groups.google.com/group/ansible-devel>`_

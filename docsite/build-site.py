@@ -15,20 +15,21 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+from __future__ import print_function
 
 __docformat__ = 'restructuredtext'
 
+import optparse
 import os
 import sys
 import traceback
 try:
     from sphinx.application import Sphinx
 except ImportError:
-    print "#################################"
-    print "Dependency missing: Python Sphinx"
-    print "#################################"
+    print("#################################")
+    print("Dependency missing: Python Sphinx")
+    print("#################################")
     sys.exit(1)
-import os
 
 
 class SphinxBuilder(object):
@@ -36,11 +37,11 @@ class SphinxBuilder(object):
     Creates HTML documentation using Sphinx.
     """
 
-    def __init__(self):
+    def __init__(self, verbosity=None, parallel=None):
         """
         Run the DocCommand.
         """
-        print "Creating html documentation ..."
+        print("Creating html documentation ...")
 
         try:
             buildername = 'html'
@@ -57,47 +58,54 @@ class SphinxBuilder(object):
             freshenv = True
 
             # Create the builder
+            # __init__(self, srcdir, confdir, outdir, doctreedir, buildername, confoverrides=None, status=<open file '<stdout>', mode 'w'>, warning=<open file '<stderr>', mode 'w'>, freshenv=False, warningiserror=False, tags=None, verbosity=0, parallel=0)
             app = Sphinx(srcdir,
-                              confdir,
-                              outdir,
-                              doctreedir,
-                              buildername,
-                              {},
-                              sys.stdout,
-                              sys.stderr,
-                              freshenv)
+                         confdir,
+                         outdir,
+                         doctreedir,
+                         buildername,
+                         confoverrides={},
+                         status=sys.stdout,
+                         warning=sys.stderr,
+                         freshenv=freshenv,
+                         verbosity=verbosity,
+                         parallel=parallel)
 
             app.builder.build_all()
 
-        except ImportError, ie:
+        except ImportError:
             traceback.print_exc()
-        except Exception, ex:
-            print >> sys.stderr, "FAIL! exiting ... (%s)" % ex
+        except Exception as ex:
+            print("FAIL! exiting ... (%s)" % ex, file=sys.stderr)
 
     def build_docs(self):
         self.app.builder.build_all()
 
+def build_rst_docs(verbosity=None, parallel=None):
+    verbosity = verbosity or 1
+    parallel = parallel or 1
+    SphinxBuilder(verbosity=verbosity,
+                  parallel=parallel)
 
-def build_rst_docs():
-    docgen = SphinxBuilder()
+USAGE = """This script builds the html documentation from rst/asciidoc sources.\n")
+Run 'make docs' to build everything.\n
+Run 'make viewdocs' to build and then preview in a web browser."""
 
 if __name__ == '__main__':
-    if '-h' in sys.argv or '--help' in sys.argv:
-        print "This script builds the html documentation from rst/asciidoc sources.\n"
-        print "    Run 'make docs' to build everything."
-        print "    Run 'make viewdocs' to build and then preview in a web browser."
-        sys.exit(0)
 
-    # The 'htmldocs' make target will call this scrip twith the 'rst'
-    # parameter' We don't need to run the 'htmlman' target then.
-    if "rst" in sys.argv:
-        build_rst_docs()
-    else:
-        # By default, preform the rst->html transformation and then
-        # the asciidoc->html trasnformation
-        build_rst_docs()
+    parser = optparse.OptionParser(USAGE)
+    parser.add_option('-v','--verbose', dest='verbosity', default=0, action="count",
+                      help="verbose mode (-vvv for more, -vvvv to enable connection debugging)")
+    parser.add_option('-j', '--parallel', dest='parallel', default="1", action='store',
+                      help="Number of threads to start")
+    parser.add_option('--view', dest='view',
+                      help="Open a browser after building docs")
 
-    if "view" in sys.argv:
+    options, args = parser.parse_args(sys.argv[:])
+
+    build_rst_docs(verbosity=options.verbosity, parallel=int(options.parallel))
+
+    if hasattr(options, 'view'):
         import webbrowser
-        if not webbrowser.open('index.html'):
-            print >> sys.stderr, "Could not open on your webbrowser."
+        if not webbrowser.open('htmlout/index.html'):
+            print("Could not open on your webbrowser.", file=sys.stderr)

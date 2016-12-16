@@ -1,8 +1,7 @@
 Error Handling In Playbooks
 ===========================
 
-.. contents::
-   :depth: 2
+.. contents:: Topics
 
 Ansible normally has defaults that make sure to check the return codes of commands and modules and
 it fails fast -- forcing an error to be dealt with unless you decide otherwise.
@@ -19,13 +18,49 @@ Ignoring Failed Commands
 
 .. versionadded:: 0.6
 
-Generally playbooks will stop executing any more steps on a host that
-has a failure.  Sometimes, though, you want to continue on.  To do so,
-write a task that looks like this::
+Generally playbooks will stop executing any more steps on a host that has a task fail.
+Sometimes, though, you want to continue on.  To do so, write a task that looks like this::
 
     - name: this will not be counted as a failure
       command: /bin/false
       ignore_errors: yes
+
+Note that the above system only governs the return value of failure of the particular task,
+so if you have an undefined variable used or a syntax error, it will still raise an error that users will need to address.
+Note that this will not prevent failures on connection or execution issues.
+This feature only works when the task must be able to run and return a value of 'failed'.
+
+.. _resetting_unreachable:
+
+Resetting Unreachable Hosts
+```````````````````````````
+
+.. versionadded:: 2.2
+
+Connection failures set hosts as 'UNREACHABLE', which will remove them from the list of active hosts for the run.
+To recover from these issues you can use `meta: clear_host_errors` to have all currently flagged hosts reactivated,
+so subsequent tasks can try to use them again.
+
+
+.. _handlers_and_failure:
+
+Handlers and Failure
+````````````````````
+
+.. versionadded:: 1.9.1
+
+When a task fails on a host, handlers which were previously notified
+will *not* be run on that host. This can lead to cases where an unrelated failure
+can leave a host in an unexpected state. For example, a task could update
+a configuration file and notify a handler to restart some service. If a
+task later on in the same play fails, the service will not be restarted despite
+the configuration change.
+
+You can change this behavior with the ``--force-handlers`` command-line option,
+or by including ``force_handlers: True`` in a play, or ``force_handlers = True``
+in ansible.cfg. When handlers are forced, they will run when notified even
+if a task fails on that host. (Note that certain errors could still prevent
+the handler from running, such as a host becoming unreachable.)
 
 .. _controlling_what_defines_failure:
 
@@ -80,6 +115,20 @@ does not cause handlers to fire::
       # this will never report 'changed' status
       - shell: wall 'beep'
         changed_when: False
+
+Aborting the play
+`````````````````
+
+Sometimes it's desirable to abort the entire play on failure, not just skip remaining tasks for a host.
+
+The ``any_errors_fatal`` play option will mark all hosts as failed if any fails, causing an immediate abort::
+
+     - hosts: somehosts
+       any_errors_fatal: true
+       roles:
+         - myrole
+
+for finer-grained control ``max_fail_percentage`` can be used to abort the run after a given percentage of hosts has failed.
 
 
 .. seealso::
